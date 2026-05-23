@@ -5,6 +5,7 @@ const dotenv = require('dotenv')
 const express = require('express');
 const cors = require('cors')
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+// import { ObjectId } from "mongodb";
 
 const uri = process.env.MONGODB_URI
 
@@ -21,7 +22,7 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   }
 });
-
+  
 async function run() {
   try {
     await client.connect();
@@ -50,7 +51,46 @@ async function run() {
         res.json(result)
     })
 
-    //pets adoption get 
+    //pets adoption get all
+    app.get('/adoptioninfo', async(req, res)=>{
+        const result = await adoptionCollection.find().toArray()
+        res.json(result);
+    })
+
+
+    //pets adoption get id diyee
+    app.get('/adoptioninfo/:id', async (req, res) => {
+    const { id } = req.params;
+
+    const result = await adoptionCollection.findOne({ id });
+    res.json(result);
+  });
+
+  // pets adotion petch Approve and Reject
+  app.patch("/adoptioninfo/:id", async (req, res) => {
+    const id = req.params.id;
+    const updatedData = req.body;
+
+    const result = await adoptionCollection.updateOne(
+      { id: id },   // 👈 custom field
+      { $set: updatedData }
+    );
+
+    res.json(result);
+});
+
+//pets adoptioninfo delete
+app.delete("/adoptioninfo/:id", async (req, res) => {
+    const id = req.params.id;
+    const result = await adoptionCollection.deleteOne({
+      id:id,
+    });
+
+    res.send(result);
+});
+
+
+    //pets adoption get for checking details page form
   app.get('/adoptioninfo/check', async (req, res) => {
   const { userEmail, id} = req.query;
 
@@ -89,6 +129,17 @@ async function run() {
         )
         res.json(result);
     })
+
+    //pet info delete 
+    app.delete("/petsinfo/:id", async (req, res) => {
+    const { id } = req.params;
+
+    const result = await petInfoCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    res.json(result);
+});
 
 
     // Send a ping to confirm a successful connection
