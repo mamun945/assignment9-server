@@ -5,6 +5,7 @@ const dotenv = require('dotenv')
 const express = require('express');
 const cors = require('cors')
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
 // import { ObjectId } from "mongodb";
 
 const uri = process.env.MONGODB_URI
@@ -22,30 +23,61 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   }
 });
+
+const jwks = createRemoteJWKSet(
+  new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
+)
+
+const verifyToken = async(req, res, next)=>{
+  const authHeader = req?.headers.authorization
+  if(!authHeader){
+    return res.status(401).json({message:"Unauthorized"})
+  }
+  const token = authHeader.split(' ')[1]
+  if(!token){
+   return res.status(401).json({message:"Unauthorized"}) 
+  }
+  // console.log(token, 'token');
+  try{
+    const {payload} = await jwtVerify(token, jwks) 
+    console.log(payload, 'payload')
+      next();
+  }catch(error){
+    return res.status(403).json({message:"Forbidden"})
+  }
+
+ 
+}
   
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const db = client.db("petnestserver")
     const petInfoCollection = db.collection("petInfo")
     const adoptionCollection = db.collection("adoption")
     
-    //  getPents info
+    //  getPets info
     app.get('/petsinfo', async(req, res)=>{
         const result = await petInfoCollection.find().toArray()
         res.json(result);
     })
 
-    // addpets infor
-    app.post('/petsinfo', async(req, res)=>{
+    //home a 6ta item nibe
+    app.get('/petsinfosix', async (req, res) => {
+  const result = await petInfoCollection.find().limit(6).toArray();
+  res.json(result);
+});
+
+    // addpets info
+    app.post('/petsinfo',verifyToken, async(req, res)=>{
         const petInfoData = req.body
         const result = await petInfoCollection.insertOne(petInfoData)
         res.json(result)
     })
 
     //pets adoption post 
-    app.post('/adoptioninfo', async(req, res)=>{
+    app.post('/adoptioninfo',verifyToken, async(req, res)=>{
         const adoptionData = req.body
         const result = await adoptionCollection.insertOne(adoptionData)
         res.json(result)
@@ -91,9 +123,9 @@ app.delete("/adoptioninfo/:id", async (req, res) => {
 
 
     //pets adoption get for checking details page form
-  app.get('/adoptioninfo/check', async (req, res) => {
+  app.get('/adoptioninfoCheck/check', async (req, res) => {
   const { userEmail, id} = req.query;
-
+ console.log(userEmail, id);
   const existingRequest = await adoptionCollection.findOne({
     userEmail: userEmail,
     id: id
@@ -105,24 +137,24 @@ app.delete("/adoptioninfo/:id", async (req, res) => {
 });
     
     // getPets infor one details
-    app.get('/petsinfo/:id', async(req, res)=>{
+    app.get('/petsinfo/:id',verifyToken, async(req, res)=>{
        const {id} = req.params
        const result = await petInfoCollection.findOne({_id:new ObjectId(id)})
        res.json(result);
     })
 
     //user id diye get 
-    app.get('/pets/:userId', async(req, res)=>{
+    app.get('/pets/:userId',verifyToken, async(req, res)=>{
           const {userId} = req.params
           const result = await petInfoCollection.find({userId:userId}).toArray()
           res.json(result);
     })
     
     // pet info update
-    app.patch('/petsinfo/:id', async(req, res)=>{
+    app.patch('/petsinfo/:id',verifyToken, async(req, res)=>{
         const {id} = req.params
         const updateData = req.body
-
+  // console.log(id, updateData);
         const result = await petInfoCollection.updateOne(
           {_id: new ObjectId(id)},
           {$set: updateData}
@@ -131,7 +163,7 @@ app.delete("/adoptioninfo/:id", async (req, res) => {
     })
 
     //pet info delete 
-    app.delete("/petsinfo/:id", async (req, res) => {
+    app.delete("/petsinfo/:id",verifyToken, async (req, res) => {
     const { id } = req.params;
 
     const result = await petInfoCollection.deleteOne({
@@ -141,9 +173,38 @@ app.delete("/adoptioninfo/:id", async (req, res) => {
     res.json(result);
 });
 
+//pet info filter by species search hobe pet name diye
+
+app.get("/petssearchfilter", async (req, res) => {
+
+        const search = req.query.search || "";
+        const species = req.query.species || "";
+
+        const query = {
+
+            // Search by pet name
+            petName: {
+                $regex: search,
+                $options: "i"
+            },
+
+            // Filter by species
+            ...(species && { species })
+        };
+
+        const result = await petInfoCollection
+            .find(query)
+            .toArray();
+
+        res.json(result);
+
+    
+});
+
+
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
